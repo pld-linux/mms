@@ -38,7 +38,8 @@ je¿eli ju¿ go widzia³e¶ i nie polubi³e¶.
 %{__make} all \
 	CC="%{__cc}" \
 	OPTFLAGS="%{rpmcflags} -I/usr/include/ncurses" \
-	LIBS="-lncurses -lpanel -lgpm"
+	LIBS="-lncurses -lpanel -lgpm" \
+	PWD=`pwd`
 
 %install
 rm -rf $RPM_BUILD_ROOT
