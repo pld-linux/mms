@@ -10,8 +10,8 @@ Source0:	%{name}_%{version}.orig.tar.gz
 #Source0:	http://www.bitchx.org/bytor/%{name}-%{version}.tgz
 Patch0:		%{name}-DEBIAN.patch
 URL:		http://www.bitchx.org/bytor/mms.html
-BuildRequires:	ncurses-devel >= 5.2
 BuildRequires:	gpm-devel
+BuildRequires:	ncurses-devel >= 5.2
 Requires:	mpg123
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
@@ -30,12 +30,13 @@ Ale ci±gle jest u¿yteczny. Zosta³ nieco zmienony wiêc spróbuj go nawet
 je¿eli ju¿ go widzia³e¶ i nie polubi³e¶.
 
 %prep
-%setup0 -q
+%setup -q
 %patch0 -p1
 
 %build
 %{__make} all \
-	CFLAGS="%{rpmcflags} -I%{_includedir}/ncurses -DVERSION=\\\"%{version}\\\" -DGPM_SUPPORT" \
+	CC="%{__cc}" \
+	OPTFLAGS="%{rpmcflags} -I/usr/include/ncurses" \
 	LIBS="-lncurses -lpanel -lgpm"
 
 %install
