@@ -30,7 +30,7 @@ je¿eli ju¿ go widzia³e¶ i nie polubi³e¶.
 
 %prep
 %setup0 -q
-%patch0 -p1 
+%patch0 -p1
 
 %build
 %{__make} all \
@@ -50,7 +50,7 @@ gzip -9nf README* BUGS TODO INSTRUCTIONS slrnrc.mms currentmusic.sl mmsrc.exampl
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%files 
+%files
 %defattr(644,root,root,755)
 %doc *.gz
 %attr(755,root,root) %{_bindir}/*
