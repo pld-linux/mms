@@ -6,6 +6,7 @@ Release:	1
 License:	GPL
 Group:		Applications/Sound
 Source0:	%{name}_%{version}.orig.tar.gz
+# Source0-md5:	13c15deb92437b1a8dc5126df3c55bcf
 #Source0:	http://www.bitchx.org/bytor/%{name}-%{version}.tgz
 Patch0:		%{name}-DEBIAN.patch
 URL:		http://www.bitchx.org/bytor/mms.html
