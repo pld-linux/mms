@@ -1,0 +1,2655 @@
+--- mms-0.89a.orig/info.c
++++ mms-0.89a/info.c
+@@ -145,7 +145,8 @@
+ 
+ 	file->bitrate = btr=t_bitrate[header.ID][3-header.layer][header.bitrate_index];
+ 
+-	framesize = (header.ID ? 144000 : 72000) * btr / (file->frequency = t_sampling_frequency[header.IDex][header.ID][header.sampling_frequency]);
++//	framesize = (header.ID ? 144000 : 72000) * btr / (file->frequency = t_sampling_frequency[header.IDex][header.ID][header.sampling_frequency]);
++ 	framesize = (file->frequency = t_sampling_frequency[header.IDex][header.ID][header.sampling_frequency]) ? (header.ID ? 144000 : 72000) * btr / file->frequency : 1; /* yes strange I know */
+ 	totalframes = (double)size / (double)framesize;
+ 	file->length = (time_t)(totalframes * (header.ID==0?576.0:1152.0)/(float)t_sampling_frequency[header.IDex][header.ID][header.sampling_frequency]);
+ 
+@@ -155,10 +156,10 @@
+ 	close(fd);
+ 	if (!strncmp("TAG", tmp.tag, 3)) {
+ 		s = tmp.title + 29;
+-		while (!isalnum(*s))
++		while (!isprint(*s))
+ 			*s-- = '\0';
+ 		s = tmp.artist + 29;
+-		while (!isalnum(*s))
++		while (!isprint(*s))
+ 			*s-- = '\0';
+ 		file->title = (char *)calloc(1, 31);
+ 		strncpy(file->title, tmp.title, 30);
+@@ -168,7 +169,14 @@
+ 		strncpy(file->artist, tmp.artist, 30);
+ 		if (strlen(file->artist) == 0)
+ 			strcpy(file->artist, "Unknown");
+-		file->genre = Genres[(int)tmp.genre];
++		if (tmp.genre<255)	
++			file->genre = Genres[(int)tmp.genre];
++		else
++			file->genre = "Unknown";
++		file->album = (char *)calloc(1,31);
++		strncpy(file->album,tmp.album,30);
++		if (strlen(file->album) == 0)
++			strcpy(file->album, "Unknown");
+ 	}
+ 	return file;
+ }
+--- mms-0.89a.orig/Makefile
++++ mms-0.89a/Makefile
+@@ -1,5 +1,10 @@
++# I've debianized it! :)
++# Yacoob T.
++DESTDIR = 
++
+ CC = gcc
+-prefix = /usr/local/bin
++prefix = $(DESTDIR)/usr/bin
++doc = $(DESTDIR)/usr/share/doc
+ 
+ PROGRAM = mms
+ VERSION = 0.89a
+@@ -15,20 +20,30 @@
+ #ARCHFLAGS = -mpentium
+ WARNINGS = -Wall -Wbad-function-cast -Wcast-align
+ #OPTFLAGS = -O2
+-# Comment this out for debugging
+-OPTFLAGS += -g3
+ 
+ CFLAGS = $(OPTFLAGS) $(PROFILE) $(WARNINGS) $(ARCHFLAGS) -DVERSION=\"$(VERSION)\"
+ 
+ # Uncomment these for GPM support
+-#SRCS += gpm.c
+-#OBJS += gpm.o
+-#CFLAGS += -DGPM_SUPPORT
+-#LIBS += -lgpm
++SRCS += gpm.c
++OBJS += gpm.o
++CFLAGS += -DGPM_SUPPORT
++LIBS += -lgpm
+ 
+ # Uncomment these if you use FreeBSD and their weird ncurses port
+ #CFLAGS += -DFREEBSD_NCURSES_PORT
+ 
++# comment this out, if you're not doing developement stuff
++OPTFLAGS += -g3
++LIBS += -ldmalloc
++
++debug: $(PROGRAM) cscope ctags
++
++cscope:
++	cscope -b
++
++ctags: 
++	ctags -R
++
+ all: $(PROGRAM)
+ 
+ default: all
+@@ -43,10 +58,13 @@
+ 	$(CC) -static $(PROFILE) $(ARCHFLAGS) -o $(PROGRAM) $(OBJS) $(LIBRARY) $(LIBS)
+ 
+ clean:
+-	rm -f *~ *.o $(PROGRAM) core *.core ktrace.out gmon.out DEADJOE 
++	rm -f *~ *.o $(PROGRAM) core *.core ktrace.out gmon.out DEADJOE cscope.out logfile
++	find * -name tags -exec rm {} \;
+ 
+ install: all
+-	install -c -o 0 -g 0 mms /usr/local/bin
++	install -c -o 0 -g 0 mms $(prefix)
++#	install -D -o 0 -g 0 INSTRUCTIONS README* $(doc)/mms
++#	install -D -o 0 -g 0 mmsrc* $(doc)/mms/examples
+ 
+ release: dist
+ 
+--- mms-0.89a.orig/README.tokens
++++ mms-0.89a/README.tokens
+@@ -1,7 +1,9 @@
+ Window format tokens:
+ 
++%c - position in circular playlist ring, in form 'current/count' i.e. 1/3
+ %t - the song title
+ %a - the artist
++%A - the Album
+ %f - filename
+ %F - complete filename, incl path
+ %p - the path
+--- mms-0.89a.orig/INSTRUCTIONS
++++ mms-0.89a/INSTRUCTIONS
+@@ -24,6 +24,9 @@
+ Pressing 'q' will quit.
+ F1 or 'l' will allow you to load a playlist. It overwrites the current playlist.
+ F2 will save the current playlist to a file.
++'`' will toggle between mp3/playlist browser. You can read a playlist in,
++by just pressing enter.
++
+  * in ALL windows:
+    * 'f' OR the right arrow key will advance one song
+    * 'b' OR the left arrow key will go back one song
+@@ -31,12 +34,19 @@
+    * 'p' will pause the player
+    * '+' will jump forward 1000 frames
+    * '-' will jump backward 1000 frames
++   * '{' will create a new playlist
++   * '}' will delete current playlist
++   * '[' will switch to previous playlist
++   * ']' will switch to next playlist
+  * in the files window or playlist window:
+    * 'e' will edit the ID3 tag of the selected mp3
+  * in the files window:
+    * return is your friend. it adds files to the playlist and changes
+      directories.
+    * 'r' will rescan the current dir.
++   * 'a' will add current dir and all its subdirectories to playlist.
++   * '0'..'9' will change to configured directory (quickdir feature in
++     mmsrc(5) file.
+  * in the info window:
+    * 'r' will randomize the playlist.
+  * in the playlist window is where the good stuff goes on:
+@@ -45,6 +55,10 @@
+      an error in one of the mp3s (or mpg123 dies :)
+    * DEL will remove a song from the playlist (unless it is playing!)
+    * 'r' will randomize the playlist
++   * 'd' will move currently selected song one position down
++   * 'u' will move currently selected song one position up
++   * '0'..'9' will read in configure playlist file (quicklist feature in
++     mmsrc(5) file)
+  * in the ID3 edit window, up/down will move to the prev/next field. Input
+    WILL BE TRUNCATED to the proper size immediately when you leave the
+    field. No mouse support for anything in here... (Sorry, no Linux... 
+--- mms-0.89a.orig/mms.c
++++ mms-0.89a/mms.c
+@@ -2,6 +2,7 @@
+ #include "defs.h"
+ #include "colors.h"
+ #include "struct.h"
++
+ #include "mms.h"
+ #include "playlist.h"
+ #include "window.h"
+@@ -12,12 +13,14 @@
+ #include "config.h"
+ #include "inputline.h"
+ #include "extern.h"
++#include "mms_gpm.h"
+ 
+ /* intialize the external variables */
+ Window *files, *info, *play, *active, *menubar, *old_active, *id3box;
+ Window *playback, *question;
+ Config *conf;
+ pid_t pid;
++pls * circular;
+ static struct sigaction handler;
+ int p_status = 0;
+ char version_str[128];
+@@ -25,6 +28,7 @@
+ /* some internal functions */
+ static int	read_key(Window *);
+ static void	init_info(void);
++void update_circular(void);
+ 
+ int
+ main(int argc, char *argv[])
+@@ -107,6 +111,8 @@
+ 	files->prev = play;
+ 	files->input = read_key;
+ 	files->flags |= W_LIST | W_RDONLY;
++	files->flags &= ~W_PLYLST;
++	files->suffix = ".mp3";
+ 
+ 	/* now we have initialized most of the window stuff, read our config */
+ 	conf = calloc(1, sizeof(Config));
+@@ -169,28 +175,37 @@
+ 	my_mvwaddstr(menubar->win, 0, 28, colors[MENU_TEXT], version_str);
+ 	init_info();
+ 
+-	play->deactivate(play);
+-	info->deactivate(info);
+-	active->activate(active);
+-	playback->deactivate(playback);
+-
+ 	files->contents.list = mp3list = (wlist *)calloc(1, sizeof(wlist));
+-	mp3list->head = read_mp3_list(mp3list);
++	mp3list->head = read_mp3_list(mp3list, files->suffix);
+ 	sort_songs(mp3list);
+ 	play->contents.list = (wlist *)calloc(1, sizeof(wlist));
+ 	info->contents.play = NULL;
++	
++	// let's initialize the circular ring of playlists!
++	circular = calloc(1,sizeof(pls));
++	circular->current = calloc(1,sizeof(ring));
++	circular->current->prev = circular->current;
++	circular->current->next = circular->current;
++	circular->current->list = play->contents.list;
++	circular->current->nr = 1;
++	circular->playing = circular->current;
++	circular->max = 30;
++	circular->count = 1;
++
++	play->deactivate(play);
++	info->deactivate(info);
++	active->activate(active);
++	playback->deactivate(playback);
+ 
+ 	files->update(files);
+ 	update_info(files);
+ 	if (*conf->dfl_plist) {
+ 		play->contents.list = read_playlist(play->contents.list, conf->dfl_plist);
+-		if (play->contents.list->head) {
+-			active->deactivate(active);
+-			active->update(active);
+-			play->activate((active = play));
+-			play->update(play);
+-		}
++		if (play->contents.list->head) 
++			update_circular();
+ 	}
++
++		
+ 	doupdate();
+ 
+ 	start_mpg_child();
+@@ -227,7 +242,15 @@
+ 	gpm_close();
+ #endif
+ 	if (pid > 0) {
++		char fname[256];
+ 		pid_t pgrp = getpgid(pid);
++
++		// kasowanie pliku ~/.currentmp3
++		if (strlen(conf->mpgfile)) {
++				snprintf(fname, sizeof(fname)-1, "%s/%s", getenv("HOME"), conf->mpgfile);
++				unlink(fname);
++		}
++
+ 		fprintf(stdout, "Cleaning up ...\n");
+ 		fflush(stdout);
+ 		handler.sa_handler = SIG_DFL;
+@@ -284,6 +307,39 @@
+ 				doupdate();
+ 			}
+ 			break;
++		case '[':
++			// one playlist left
++			circular = prev_circular(circular);
++			break;
++			
++		case ']':
++			// one playlist right
++			circular = next_circular(circular);
++			break;
++			
++		case '{':
++			// add a new playlist
++			circular = add_circular(circular);
++			break;
++
++		case '}':
++			// delete a playlist
++			circular = del_circular(circular);
++			break;
++
++		case 'a':
++		case 'A':
++			// recursive add whole dir
++			if (active == files)
++			{
++				play->contents.list = recursive_add_to_playlist(play->contents.list, files->contents.list->selected);
++				if (play->contents.list->head)
++					update_circular();
++				play->update(play);
++				doupdate();
++			}
++			break;
++
+ 		case 'e':
+ 		case 'E':
+ 			if (window == info)
+@@ -291,18 +347,21 @@
+ 			else if (!(window->contents.list->selected->flags & F_DIR))
+ 				edit_tag(window->contents.list->selected);
+ 			break;
++
+ 		case KEY_RIGHT:
+ 		case 'f':
+ 		case 'F':
+ 			if (p_status)
+-				jump_forward(play->contents.list);
++//				jump_forward(play->contents.list);
++				jump_forward(circular->playing->list);
+ 				doupdate();
+ 			break;
+ 		case KEY_LEFT:
+ 		case 'b':
+ 		case 'B':
+ 			if (p_status)
+-				jump_backward(play->contents.list);
++//				jump_backward(play->contents.list);
++				jump_backward(circular->playing->list);
+ 				doupdate();
+ 			break;
+ 		case 'q':
+@@ -328,14 +387,16 @@
+ 		case 's':
+ 		case 'S':
+ 			if (p_status)
+-				stop_player(play->contents.list);
++//				stop_player(play->contents.list);
++				stop_player(circular->playing->list);
+ 				clear_play_info();
+ 				doupdate();
+ 			break;
+ 		case 'p':
+ 		case 'P':
+ 			if (p_status > 0) {
+-				pause_player(play->contents.list);
++//				pause_player(play->contents.list);
++				pause_player(circular->playing->list);
+ 				play->update(play);
+ 				doupdate();
+ 			}
+@@ -353,7 +414,7 @@
+ 				wlist *mp3list = active->contents.list;
+ 				free_list(mp3list->head);
+ 				memset(mp3list, 0, sizeof(wlist));
+-				mp3list->head = read_mp3_list(mp3list);
++				mp3list->head = read_mp3_list(mp3list, files->suffix);
+ 				if (mp3list->head)
+ 					sort_songs(mp3list);
+ 				files->update(files);
+@@ -362,11 +423,66 @@
+ 			break;
+ 		case '+':
+ 			if (p_status)
+-				send_cmd(JUMP, 1000);
++				send_cmd(JUMP, conf->jump);
+ 			break;
+ 		case '-':
+ 			if (p_status)
+-				send_cmd(JUMP, -1000);
++				send_cmd(JUMP, -(conf->jump));
++			break;
++		case '1':
++		case '2':
++		case '3':
++		case '4':
++		case '5':
++		case '6':
++		case '7':
++		case '8':
++		case '9':
++			// quicktab action!
++			if (active == files)
++			{	
++				char *cwd = getcwd(NULL, 0);
++				wlist *mp3list = files->contents.list;
++
++				chdir(conf->q.quickdirs[c-'0']);
++    			free_list(files->contents.list->head);
++	    		memset(mp3list, 0, sizeof(wlist));
++		    	mp3list->head = read_mp3_list(mp3list, files->suffix);
++			    if (!(mp3list->head))
++			    {
++					chdir(cwd);
++      				mp3list->head = read_mp3_list(mp3list, files->suffix);
++				};
++			
++				if (mp3list->head)
++					sort_songs(mp3list);
++
++				free(cwd);
++				files->update(files);
++			}
++			else
++			{
++				play->contents.list = read_playlist(play->contents.list, conf->q.quicklists[c-'0']);
++				if (play->contents.list->head)
++					update_circular();
++
++			}
++			doupdate();
++			break;
++			
++		case 'u': // moving song up
++		case 'U':
++			if (active == play)
++				move_song_up(play->contents.list);
++			window->update(window);
++			doupdate();
++			break;
++		case 'd': // moving song down
++		case 'D':
++			if (active == play)
++				move_song_down(play->contents.list);
++			window->update(window);
++			doupdate();
+ 			break;
+ 		case 'l':
+ 		case 'L':
+@@ -378,7 +494,7 @@
+ 			inputline->win = menubar->win;
+ 			inputline->panel = menubar->panel;
+ 			inputline->x = inputline->y = 0;
+-			strncpy(inputline->prompt, "Path to playlist:", 39);
++			strncpy(inputline->prompt, "Load a playlist:", 39);
+ 			inputline->plen = strlen(inputline->prompt);
+ 			inputline->flen = 60;
+ 			inputline->anchor = inputline->buf;
+@@ -400,7 +516,7 @@
+ 			inputline->win = menubar->win;
+ 			inputline->panel = menubar->panel;
+ 			inputline->x = inputline->y = 0;
+-			strncpy(inputline->prompt, "Save Path:", 39);
++			strncpy(inputline->prompt, "Save a playlist:", 39);
+ 			inputline->plen = strlen(inputline->prompt);
+ 			inputline->flen = 60;
+ 			inputline->anchor = inputline->buf;
+@@ -414,6 +530,27 @@
+ 			update_menu(inputline);
+ 			doupdate();
+ 			break;
++		case '`':
++			{ wlist *mp3list = NULL;
++
++			if (files->flags & W_PLYLST)
++			{ // playlist window -> file window
++				files->flags &= ~W_PLYLST;
++				files->suffix = ".mp3";
++			}
++			else
++			{ // file window -> playlist window
++				files->flags |= W_PLYLST;
++				files->suffix = ".m3u";
++			};
++			// update our panel
++			files->contents.list = mp3list = (wlist *)calloc(1, sizeof(wlist));
++			mp3list->head = read_mp3_list(mp3list, files->suffix);
++			sort_songs(mp3list);
++			files->update(files);
++			doupdate(); }
++
++			break;
+ 		default:
+ 			break;
+ 	}
+@@ -427,51 +564,42 @@
+ 		return;
+ 	if (active == files) {
+ 		if (mp3list->selected->flags & F_DIR) {
+-			char *prevpwd = NULL;
+-			if (!strcmp("../", mp3list->selected->filename))
+-				prevpwd = getcwd(NULL, 0);
++			char *prevpwd = getcwd(NULL, 0);
+ 			chdir(mp3list->selected->filename);
+ 			free_list(mp3list->head);
+ 			memset(mp3list, 0, sizeof(wlist));
+-			mp3list->head = read_mp3_list(mp3list);
++			mp3list->head = read_mp3_list(mp3list, files->suffix);
++			if (!(mp3list->head))
++			{
++				chdir(prevpwd);
++				mp3list->head = read_mp3_list(mp3list, files->suffix);
++			};
++			
+ 			if (mp3list->head)
+ 				sort_songs(mp3list);
+-			/* egads this is ugly */
+-			if (prevpwd) {
+-/* -- gone for now until i rework it
+-				flist *ftmp;
+-				char *p = NULL;
+-				if ((p = strrchr(prevpwd, '/'))) {
+-					int i = strlen(p);
+-					*p++ = '\0';
+-					memmove(prevpwd, p, i+1);
+-					strcat(prevpwd, "/");
+-					for (i = 0, ftmp = mp3list->head; ftmp; ftmp = ftmp->next, i++) {
+-						if (!strcmp(ftmp->filename, prevpwd)) {
+-							mp3list->head->flags &= ~F_SELECTED;
+-							mp3list->head->colors = colors[SELECTED];
+-							mp3list->selected = ftmp;
+-							ftmp->flags |= F_SELECTED;
+-							ftmp->colors = colors[SELECTED];
+-							mp3list->where += i;
+-							break;
+-						}
+-					}
+-				}
+-*/
+-				free(prevpwd);
+-			}
++			
++			free(prevpwd);
+ 			files->update(files);
+-		} else {
+-			play->contents.list = add_to_playlist(play->contents.list, mp3list->selected);
+-			if (conf->c_flags & C_FADVANCE)
+-				if (info->update(move_selector(files, KEY_DOWN)))
+-					files->update(files);
+-			play->update(play);
+-		}
++		} else 
++			if (files->flags & W_PLYLST) { 
++				// it's a playlist window now, read in a playlist
++				play->contents.list = read_playlist(play->contents.list, mp3list->selected->filename);
++				if (play->contents.list->head) 
++					update_circular();
++
++			}
++			else
++			{ // it's a file window now, add current file to current playlist
++				play->contents.list = add_to_playlist(play->contents.list, mp3list->selected);
++				if (conf->c_flags & C_FADVANCE)
++					if (info->update(move_selector(files, KEY_DOWN)))
++						files->update(files);
++				play->update(play);
++			};
++		
+ 		doupdate();
+ 	} else if (active == play)
+-		jump_to_song(active->contents.list->selected);
++		jump_to_song(active->contents.list->selected, circular->current);
+ }
+ 
+ void
+@@ -557,3 +685,14 @@
+ 	update_panels();
+ }
+ 
++void
++update_circular(void)
++{
++	circular->current->list = play->contents.list;
++//	info->contents.play = play->contents.list->selected;
++	active->deactivate(active);
++	active->update(active);
++	play->activate((active = play));
++	play->update(play);
++	info->update(info);
++}
+--- mms-0.89a.orig/playlist.c
++++ mms-0.89a/playlist.c
+@@ -8,14 +8,133 @@
+ #include "window.h"
+ #include "mms.h"
+ #include "extern.h"
++#include "tokens.h"
++#include "info.h"
+ 
+ static flist	*parse_playlist_line(flist *, char *);
+ static void	 free_playlist(wlist *);
+ 
++pls *
++prev_circular(pls * circular)
++{
++	// one playlist left
++	if (circular->count==1)
++		return circular;
++
++	circular->current = circular->current->prev;
++	play->contents.list = circular->current->list;
++	play->update(play);
++	doupdate();
++	return circular;
++}
++
++pls *
++next_circular(pls * circular)
++{
++	// one playlist right
++	if (circular->count==1)
++		return circular;
++	
++	circular->current = circular->current->next;
++	play->contents.list = circular->current->list;
++	play->update(play);
++	doupdate();
++	return circular;
++}
++
++pls *
++add_circular(pls * circular)
++{
++	// add new playlist
++	ring *tmp = (ring *)calloc(1, sizeof(ring));
++	ring *c = circular->current;
++	int i;
++	
++	tmp->list = (wlist *)calloc(1, sizeof(wlist));
++
++
++	if (circular->count==circular->max)
++	{
++		free(tmp->list);
++		free(tmp);
++		return circular;
++	}
++	
++	if (circular->count==1)
++
++	{ // only one plylst so far, special case
++		// make it loopy...
++		c->next = tmp;
++		tmp->next = c;
++		c->prev = tmp;
++		tmp->prev = c;
++	}
++	else
++	{ // put a new plylst into ring, instead of current one
++		tmp->next = c->next;
++		c->next->prev = tmp;
++		tmp->prev = c;
++		c->next = tmp;
++	}
++
++	// make new list current one and show it!
++	circular->current = tmp;
++
++	// renumerate circular
++	i = tmp->prev->nr;
++	for ( ; tmp->nr!=1 ; tmp = tmp->next)
++		tmp->nr = ++i;
++	
++	circular->count++;
++	play->contents.list = circular->current->list;
++	play->update(play);
++	doupdate();
++	return circular;
++}
++
++pls *
++del_circular(pls * circular)
++{
++	ring * todel = circular->current;
++	ring * tmp = NULL;
++	
++	// is this our last playlist?
++	if (circular->count==1)
++		return circular;
++
++	// nope, let's nuke it!
++	// first, delete from the chain
++	todel->next->prev = todel->prev;
++	todel->prev->next = todel->next;
++    
++	// update current one to one after
++	circular->current = todel->next;
++	circular->count--;
++
++	// then, purge todel's content
++	free_playlist(todel->list);
++
++	// and finally, get rid of this playlist!
++	free(todel);
++
++	// reenumerate circular
++	for(tmp = circular->current; tmp->nr>1 ; tmp = tmp->next)
++		tmp->nr--;
++		
++	// update display
++	play->contents.list = circular->current->list;
++	play->update(play);
++	doupdate();
++
++	return circular;
++}
++
+ void
+ play_next_song(void)
+ {
+-	flist *ftmp = play->contents.list->playing;
++//	flist *ftmp = play->contents.list->playing;
++	wlist *curpld = circular->playing->list;
++	flist *ftmp = curpld->playing;
+ 
+ 	if (!ftmp)
+ 		return;
+@@ -26,12 +145,14 @@
+ 	else
+ 		ftmp->colors = colors[UNSELECTED];
+ 	if ((conf->c_flags & C_LOOP) && !ftmp->next)
+-		ftmp = play->contents.list->head;
++//		ftmp = play->contents.list->head;
++		ftmp = curpld->head;
+ 	else
+ 		ftmp = ftmp->next;
+-	if (!jump_to_song(ftmp)) {
++	if (!jump_to_song(ftmp, circular->playing)) {
+ 		info->contents.play = NULL;
+-		play->contents.list->playing = NULL;
++//		play->contents.list->playing = NULL;
++		curpld->playing = NULL;
+ 		play->update(play);
+ 		doupdate();
+ 	}
+@@ -40,7 +161,8 @@
+ wlist *
+ jump_forward(wlist *playlist)
+ {
+-	flist *ftmp = play->contents.list->playing;
++//	flist *ftmp = play->contents.list->playing;
++	flist *ftmp = circular->playing->list->playing;
+ 
+ 	if (!ftmp)
+ 		return playlist;
+@@ -50,13 +172,15 @@
+ 	else
+ 		ftmp->colors = colors[UNSELECTED];
+ 	if ((conf->c_flags & C_LOOP) && !ftmp->next)
+-		ftmp = play->contents.list->head;
++//		ftmp = play->contents.list->head;
++		ftmp = circular->playing->list->head;
+ 	else
+ 		ftmp = ftmp->next;
+-	if (!jump_to_song(ftmp)) {
++	if (!jump_to_song(ftmp, circular->playing)) {
+ 		stop_player(playlist);
+-    info->contents.play = NULL;
+-		play->contents.list->playing = NULL;
++		info->contents.play = NULL;
++//		play->contents.list->playing = NULL;
++//		circular->playing->list->playing = NULL;
+ 		play->update(play);
+ 	}
+ 	return playlist;
+@@ -65,7 +189,8 @@
+ wlist *
+ jump_backward(wlist *playlist)
+ {
+-	flist *ftmp = play->contents.list->playing;
++//	flist *ftmp = play->contents.list->playing;
++	flist *ftmp = circular->playing->list->playing;
+ 
+ 	if (!ftmp)
+ 		return playlist;
+@@ -75,26 +200,34 @@
+ 	else
+ 		ftmp->colors = colors[UNSELECTED];
+ 	if ((conf->c_flags & C_LOOP) && !ftmp->prev)
+-		ftmp = play->contents.list->tail;
++//		ftmp = play->contents.list->tail;
++		ftmp = circular->playing->list->tail;
+ 	else
+ 		ftmp = ftmp->prev;
+-	if (!jump_to_song(ftmp)) {
++	if (!jump_to_song(ftmp, circular->playing)) {
+ 		stop_player(playlist);
+ 		info->contents.play = NULL;
+-		play->contents.list->playing = NULL;
++//		play->contents.list->playing = NULL;
++//		circular->playing->list->playing = NULL;
+ 		show_list(play);
+ 	}
+ 	return playlist;
+ }
+ 
+ int
+-jump_to_song(flist *selected)
++jump_to_song(flist *selected, ring * c)
+ {
+ 	char buf[BIG_BUFFER_SIZE+1];
+-	wlist *playlist = play->contents.list;
++//	wlist *playlist = play->contents.list;
++	wlist *playlist = c->list;
++	
++	char fname[256];
++	FILE *mmms;
+ 
+-	selected = next_valid(play, selected, KEY_DOWN);
++	circular->playing = c;
+ 	
++	selected = next_valid(play, selected, KEY_DOWN);
++
+ 	if (!playlist || !selected)
+ 		return 0;
+ 	
+@@ -118,10 +251,30 @@
+ 		selected->colors = colors[PLAYING];
+ 	playlist->playing = selected;
+ 	info->contents.play = selected;
+-	if (active == info)
+-		info->update(info);
++//	if (active == info)
++	info->update(info);
+ 	play->update(play);
+ 	update_title(playback);
++
++	// if required, create a info file with info about current
++	// mp3file
++	if (strlen(conf->mpgfile)) {
++		snprintf(fname, sizeof(fname)-1, "%s/%s", getenv("HOME"), conf->mpgfile);
++		if ((mmms = fopen(fname, "w"))) {
++			// we have open file, now we may write
++			// if so, write the info from it
++			// format of this info is taken from another
++			// option in config file
++
++			char p[255];
++			memset(p, 0, sizeof(p));
++
++			parse_tokens( selected, p, sizeof(p)-1 , conf->mpgfileformat);
++			fprintf(mmms, p);
++			fclose(mmms);
++		}
++	}
++
+ 	doupdate();
+ 	return 1;
+ }
+@@ -129,11 +282,16 @@
+ wlist *
+ stop_player(wlist *playlist)
+ {
+-	flist *ftmp = play->contents.list->playing;
++//	flist *ftmp = play->contents.list->playing;
++	flist *ftmp = circular->playing->list->playing;
++	
++	char fname[256];
+ 	
+ 	if (ftmp) {
+-		info->contents.play = NULL;
+-		play->contents.list->playing = NULL;
++//		info->contents.play = NULL;
++//		play->contents.list->playing = NULL;
++		circular->playing->list->playing = NULL;
++		circular->playing = circular->current; // !!!???
+ 		ftmp->flags &= ~F_PLAY;
+ 		if (ftmp->flags & F_SELECTED)
+ 			ftmp->colors = colors[SELECTED];
+@@ -143,6 +301,13 @@
+ 	}
+ 	send_cmd(STOP);
+ 	update_title(playback);
++	
++	// kasowanie ~/.currentmp3
++	if (strlen(conf->mpgfile)) {
++		snprintf(fname, sizeof(fname)-1, "%s/%s", getenv("HOME"), conf->mpgfile);
++		unlink(fname);
++	}
++						
+ 	return playlist;
+ }
+ 
+@@ -163,6 +328,102 @@
+ }
+ 
+ wlist *
++move_song_up(wlist *playlist)
++{
++
++	flist *moved=NULL,  *one_before=NULL, *one_after=NULL;
++	moved = playlist->selected;
++
++	if (!moved)	// nothing is selected right now, bail out
++		return playlist;
++
++	one_before = moved->prev;
++	if (!one_before) 	// song is at the very begining of playlist
++		return playlist;// nowhere to move
++
++	one_after = moved->next;
++
++	// now we delete 'moved' from our list...
++	one_before->next = one_after;
++	if (one_after)
++		one_after->prev = one_before;
++
++
++	// ... and reattach it before one_before
++	moved->next = one_before;
++	moved->prev = one_before->prev;
++	one_before->prev = moved;
++	if (moved->prev)
++		moved->prev->next = moved;
++
++	// some updating of playlist struct
++	// have we moved the very last position? If so - update tail
++	if (playlist->tail == moved)
++		playlist->tail = one_before;
++
++	// have we moved the song to the very first postion? If so -
++	// update head
++	if (playlist->head == one_before)
++		playlist->head = moved;
++
++	// same here, for top pointer
++	if (playlist->top == one_before)
++		playlist->top = moved;
++
++	// decrease position
++	playlist->where--;
++	
++	return playlist;
++}
++
++wlist *
++move_song_down(wlist *playlist)
++{
++	flist *moved,  *one_before=NULL, *one_after=NULL;
++	moved = playlist->selected;
++
++	if (!moved)	// nothing is selected, bail out
++		return playlist;
++
++	one_before = moved->prev;
++	one_after = moved->next;
++	if (!one_after)	// song at the very end of playlist
++		return playlist; // nowhere to move
++
++	// we delete moved from the list...
++	if (one_before)
++		one_before->next = one_after;
++	one_after->prev = one_before;
++
++	// ... and reattach it after one_after
++	moved->next = one_after->next;
++	moved->prev = one_after;
++	one_after->next = moved;
++	if (moved->next)
++		moved->next->prev = moved;
++
++	// updating of playlist
++	// have we moved the song to the very end? If so - update tail
++	if (playlist->tail == one_after)
++		playlist->tail = moved;
++
++	// have we moved the song from the very beginning? If so -
++	// update head
++	if (playlist->head == moved)
++		playlist->head = one_after;
++		
++	// same for top pointer
++	if (playlist->top == moved)
++		playlist->top = one_after;
++
++	// increase position
++	playlist->where++;
++
++	return playlist;
++
++}
++
++wlist *
+ randomize_list(wlist *playlist)
+ {
+ 	int i = playlist->length, j, k, selected = 0, top = 0;
+@@ -218,6 +479,65 @@
+ 	return playlist;
+ }
+ 
++
++int 
++recurse_dir(wlist *playlist, flist *file)
++{
++	while (file) 
++	{
++		if (file->flags & F_DIR)
++		{
++			// is a directory, recurse it!
++			char *prevpwd = getcwd(NULL, 0);
++			wlist *mp3list = (wlist *) calloc(1, sizeof(wlist));
++			
++			// first, change to that dir
++			chdir(file->fullpath);
++
++			// read its mp3s
++			mp3list->head = read_mp3_list(mp3list, ".mp3");
++
++			// if we did read anything
++			if (mp3list->head)
++			{
++				sort_songs(mp3list);
++				recurse_dir(playlist, mp3list->head->next);
++			}
++
++			// chdir back
++			chdir(prevpwd);
++				
++			// get rid of temporary vars
++			free(prevpwd);
++			free_playlist(mp3list);
++		}
++
++		else
++			add_to_playlist(playlist, file);
++
++		file = file->next;
++	};
++
++	return 0;
++}
++
++wlist *
++recursive_add_to_playlist(wlist *playlist, flist *file)
++{
++	flist *tmp = NULL;
++
++	// let's do the revolut^Wloop, baby!
++	// first, let's find top of our dir
++	for (tmp = file; tmp->prev; )
++		tmp=tmp->prev;
++	// top is "../", move one down
++	tmp = tmp->next;
++	// recurence is cool.
++	recurse_dir(playlist, tmp);
++
++	return playlist;
++}
++
+ wlist *
+ add_to_playlist(wlist *playlist, flist *file)
+ {
+@@ -241,6 +561,7 @@
+ 	newfile->bitrate = file->bitrate;
+ 	newfile->frequency = file->frequency;
+ 	newfile->genre = file->genre;
++	newfile->album = file->album;
+ 	if (file->title)
+ 		newfile->title = strdup(file->title);
+ 	if (file->artist)
+@@ -285,6 +606,7 @@
+ 	my_mvwaddstr(menubar->win, 0, 28, colors[MENU_TEXT], version_str);
+ 	play->contents.list = read_playlist(play->contents.list, input->buf);
+ 	if (play->contents.list->head) {
++		circular->current->list = play->contents.list;
+ 		info->contents.play = play->contents.list->selected;
+ 		active->deactivate(active);
+ 		active->update(active);
+@@ -329,8 +651,9 @@
+ 		return 0;
+ 	
+ 	for (ftmp = playlist->head; ftmp; ftmp = ftmp->next)
+-		fprintf(fp, "%s/%s:%s:%s:%ld:%d:%d\n", ftmp->path, ftmp->filename,
+-			ftmp->artist?:"", ftmp->title?:"", (long int)ftmp->length, ftmp->bitrate, ftmp->frequency);
++		// we do try to be m3u compatibile
++		fprintf(fp, "%s/%s\n", ftmp->path, ftmp->filename);
++//		fprintf(fp, "%s/%s:%s:%s:%ld:%d:%d\n", ftmp->path, ftmp->filename, ftmp->artist?:"", ftmp->title?:"", (long int)ftmp->length, ftmp->bitrate, ftmp->frequency);
+ 	fclose(fp);
+ 	return 1;
+ }
+@@ -342,18 +665,16 @@
+ 	flist *ftmp = NULL, *first = NULL, *last = NULL;
+ 	wlist *playlist = plist;
+ 	char buf[1025];
+-	struct stat sb;
++	//struct stat sb;
+ 
+ 	if (!plist)
+ 		return plist;
+ 
+ 	if (!(fp = fopen(file, "r")))
+ 		return plist;
++	
+ 	plist = (wlist *)calloc(1, sizeof(wlist));
+ 
+-	if (playlist->head && pid)
+-		stop_player(playlist);
+-
+ 	first = ftmp = (flist *)calloc(1, sizeof(flist));
+ 
+ 	while (!feof(fp)) {
+@@ -363,11 +684,14 @@
+ 			ftmp = (flist *)calloc(1, sizeof(flist));
+ 			ftmp->colors = colors[UNSELECTED];
+ 		}
+-		if (!(parse_playlist_line(ftmp, buf)) || (stat(ftmp->fullpath, &sb) != 0)) {
++
++		if (!(parse_playlist_line(ftmp, buf))) {
+ 			free_flist(ftmp);
+ 			memset(ftmp, 0, sizeof(flist));
+ 			continue;
+-		}
++		} 
++
++		
+ 		ftmp->prev = last;
+ 		if (last)
+ 			last->next = ftmp;
+@@ -383,10 +707,13 @@
+ 		first->colors = colors[SELECTED];
+ 	} else
+ 		free(first);
++
+ 	if (plist->length > 0) {
+ 		free_playlist(playlist);
+ 		playlist = plist;
+ 		playlist->where = 1;
++		if (playlist->head && pid)
++			stop_player(playlist);
+ 	} else
+ 		free(plist);
+ 	return playlist;
+@@ -401,17 +728,29 @@
+ parse_playlist_line(flist *file, char *line)
+ {
+ 	char *s, *p = line;
++    //flist *tmp = NULL;
++	struct stat st;
+ 
+-	if (!(s = strchr(line, ':')))
+-		return NULL;
+-	*s++ = '\0';
+-	file->fullpath = strdup(p);
++	// strip \n at the end of line
++	s = (strrchr(line, '\n'));
++	*s = 0;
++	
++	file->fullpath = strdup(line);
+ 	if (!(p = strrchr(p, '/')))
+ 		return NULL;
+ 	*p++ = '\0';
+ 	file->path = strdup(line);
+ 	file->filename = strdup(p);
+-	if (!(p = strchr(s, ':')))
++
++	// is this file readable?
++	if (stat(file->fullpath, &st))
++		return NULL;
++	
++	// is this a mp3 file?
++	if (!mp3_info(file->fullpath, file, st.st_size))
++		return NULL;
++	
++/*	if (!(p = strchr(s, ':')))
+ 		return NULL;
+ 	*p++ = '\0';
+ 	if (s && *s)
+@@ -429,7 +768,7 @@
+ 	file->bitrate = (short) strtoul(++p, &s, 10);
+ 	if (*s != ':')
+ 		return NULL;
+-	file->frequency = (int) strtoul(++s, &p, 10);
++	file->frequency = (int) strtoul(++s, &p, 10);*/
+ 	return file;
+ }
+ 
+--- mms-0.89a.orig/config.c
++++ mms-0.89a/config.c
+@@ -17,10 +17,14 @@
+ 
+ #define COMMENT '#'
+ #define YESNO(s) (s[0] == 'y' || s[0] == 't' || s[0] == '1')
++#define DEF_MPGFILEFORMAT "%t (%a - %A)"
++#define QDIR 1
++#define QLIST 2
+ 
+ static Config		*set_option(Config *, char *, char *);
+ static u_int32_t	 merge_colors(u_int32_t, u_int32_t);
+ static u_int32_t	 str2color(char *);
++static void 	 set_quick(char*, char*, int);
+ static void		 set_color(char *, char *);
+ static void		 set_window_defaults(void);
+ static void		 set_color_defaults(void);
+@@ -41,6 +45,7 @@
+ 	memset(fname, 0, sizeof(fname));
+ 	memset(colors, 0, sizeof(colors));
+ 
++	strncpy(conf->mpgfileformat, DEF_MPGFILEFORMAT, sizeof(DEF_MPGFILEFORMAT)-1);
+ 	set_window_defaults();
+ 	set_color_defaults();
+ 
+@@ -67,6 +72,10 @@
+ 			continue;
+ 		if (!strcasecmp(keyword, "set"))
+ 			set_option(conf, param, value);
++		else if (!strcasecmp(keyword, "quickdir"))
++			set_quick(param, value, QDIR);
++		else if (!strcasecmp(keyword, "quicklist"))
++			set_quick(param, value, QLIST);
+ 		else if (!strcasecmp(keyword, "color"))
+ 			set_color(param, value);
+ 		else if (!strcasecmp(keyword, "info"))
+@@ -86,6 +95,30 @@
+ 	return conf;
+ }
+ 
++static void
++set_quick(char *param, char *value, int type)
++{
++	int pos = strtol(param, NULL, 10);
++	extern int errno;
++
++	// FIXME: is there an easier way to detect zero from string?
++	if ((!pos) && (*param!='0'))
++			return;
++
++	// which quickdir are we trying to setup?
++	if ((pos>9) || (pos<0) || (errno))
++		return;
++
++	switch(type) {
++		case QDIR:
++			conf->q.quickdirs[pos] = strdup(value);
++			break;
++		case QLIST:
++			conf->q.quicklists[pos] = strdup(value);
++			break;
++	}
++}
++	
+ /* All configurable parameters go here */
+ 
+ static Config *
+@@ -94,7 +127,11 @@
+ 	if (!strcasecmp(option, "mpgpath"))
+ 		strncpy(conf->mpgpath, value, sizeof(conf->mpgpath)-1);
+ 	if (!strcasecmp(option, "playlist"))
+-		strncpy(conf->dfl_plist, value, sizeof(conf->mpgpath)-1);
++		strncpy(conf->dfl_plist, value, sizeof(conf->dfl_plist)-1);
++	if (!strcasecmp(option, "mpgfile"))
++		strncpy(conf->mpgfile, value, sizeof(conf->mpgfile)-1);
++	if (!strcasecmp(option, "mpgfileformat"))
++		strncpy(conf->mpgfileformat, value, sizeof(conf->mpgfileformat)-1);
+ 	else if (!strcasecmp(option, "file_advance"))
+ 		conf->c_flags |= YESNO(value) * C_FADVANCE;
+ 	else if (!strcasecmp(option, "playlist_advance"))
+@@ -320,25 +357,25 @@
+ static void
+ set_color_defaults(void)
+ {
+-	colors[ACTIVE] = merge_colors(B_GREEN, BLUE);
+-	colors[INACTIVE] = merge_colors(YELLOW, BLUE);
++	colors[ACTIVE] = merge_colors(YELLOW, BLACK);
++	colors[INACTIVE] = merge_colors(BROWN, BLACK);
+ 	colors[SELECTED] = merge_colors(YELLOW, RED);
+-	colors[UNSELECTED] = merge_colors(WHITE, BLUE); 
+-	colors[TITLE] = merge_colors(WHITE, GREEN);
+-	colors[SCROLL] = merge_colors(YELLOW, BLUE);
+-	colors[SCROLLBAR] = merge_colors(YELLOW, BLUE);
+-	colors[PLAYING] = merge_colors(B_CYAN, BLUE);
++	colors[UNSELECTED] = merge_colors(GREY, BLACK); 
++	colors[TITLE] = merge_colors(CYAN, BLACK);
++	colors[SCROLL] = merge_colors(YELLOW, BLACK);
++	colors[SCROLLBAR] = merge_colors(YELLOW, BLACK);
++	colors[PLAYING] = merge_colors(B_CYAN, BLACK);
+ 	colors[SEL_PLAYING] = merge_colors(B_CYAN, RED);
+-	colors[FILE_BACK] = merge_colors(BLACK, BLUE);
+-	colors[INFO_BACK] = merge_colors(BLACK, BLUE);
+-	colors[PLAY_BACK] = merge_colors(BLACK, BLUE);
+-	colors[MENU_BACK] = merge_colors(BLACK, BLUE);
+-	colors[MENU_TEXT] = merge_colors(B_RED, BLUE);
+-	colors[ARROWS] = merge_colors(YELLOW, BLUE);
+-	colors[EDIT_BACK] = merge_colors(B_GREEN, BLUE);
+-	colors[EDIT_ACTIVE] = merge_colors(WHITE, BLACK);
+-	colors[EDIT_INACTIVE] = merge_colors(YELLOW, BLUE);
+-	colors[EDIT_PROMPT] = merge_colors(WHITE, BLUE);
++	colors[FILE_BACK] = merge_colors(BLACK, BLACK);
++	colors[INFO_BACK] = merge_colors(BLACK, BLACK);
++	colors[PLAY_BACK] = merge_colors(BLACK, BLACK);
++	colors[MENU_BACK] = merge_colors(BLACK, BLACK);
++	colors[MENU_TEXT] = merge_colors(B_RED, BLACK);
++	colors[ARROWS] = merge_colors(YELLOW, BLACK);
++	colors[EDIT_BACK] = merge_colors(YELLOW, BLACK);
++	colors[EDIT_ACTIVE] = merge_colors(WHITE, BLUE);
++	colors[EDIT_INACTIVE] = merge_colors(GREY, BLACK);
++	colors[EDIT_PROMPT] = merge_colors(WHITE, BLACK);
+ }
+ 
+ static int
+--- mms-0.89a.orig/gpm.c
++++ mms-0.89a/gpm.c
+@@ -4,6 +4,9 @@
+ #include "extern.h"
+ #include "mms_gpm.h"
+ #include "misc.h"
++#include "window.h"
++#include "files.h"
++#include "mms.h"
+ 
+ 
+ static void	gpm_process_click(Window *, int, int, int);
+@@ -82,7 +85,7 @@
+ gpm_process_scroll(Window *win, int click, int mouse_y, int start_y)
+ {
+ 	/* from do_scrollbar in misc.c */
+-	int i = 1, offscreen, x = win->width-2, y = win->height-1, key = -1;
++	int i = 1, offscreen, /*x = win->width-2,*/ y = win->height-1, key = -1;
+ 	int top, bar, bottom;
+ 	double value;
+ 	wlist *wtmp = win->contents.list;
+--- mms-0.89a.orig/include/extern.h
++++ mms-0.89a/include/extern.h
+@@ -16,6 +16,8 @@
+ extern char		 version_str[128];
+ extern char		*Genres[255];
+ 
++extern pls *circular;
++
+ /* colors */
+ extern u_int32_t	 colors[];
+ 
+--- mms-0.89a.orig/include/files.h
++++ mms-0.89a/include/files.h
+@@ -5,7 +5,7 @@
+ #include "struct.h"
+ #endif
+ 
+-flist	*read_mp3_list(wlist *);
++flist	*read_mp3_list(wlist *, char *);
+ wlist	*sort_songs(wlist *);
+ flist	*delete_file(Window *, flist *);
+ flist	*next_valid(Window *, flist *, int);
+--- mms-0.89a.orig/include/playlist.h
++++ mms-0.89a/include/playlist.h
+@@ -10,7 +10,7 @@
+ int	 do_read_playlist(Input *);
+ int	 do_save_playlist(Input *);
+ int	 write_playlist(wlist *, const char *);
+-int	 jump_to_song(flist *);
++int	 jump_to_song(flist *, ring *);
+ int	 playback_title(Window *);
+ 
+ wlist	*add_to_playlist(wlist *, flist *);
+@@ -20,5 +20,13 @@
+ wlist	*jump_backward(wlist *);
+ wlist	*randomize_list(wlist *);
+ wlist	*read_playlist(wlist *, const char *);
++wlist   *move_song_up(wlist *);
++wlist   *move_song_down(wlist *);
++wlist   *recursive_add_to_playlist(wlist *, flist *);
++
++pls * next_circular (pls *);
++pls * prev_circular (pls *);
++pls * add_circular (pls *);
++pls * del_circular (pls *);
+ 
+ #endif /* _playlist_h */
+--- mms-0.89a.orig/include/struct.h
++++ mms-0.89a/include/struct.h
+@@ -6,6 +6,11 @@
+ #endif  /* _defs_h */
+ 
+ typedef struct {
++	char *quickdirs[10];			/* max of 10 quickdirs       */
++	char *quicklists[10];			/* max of 10 quickplaylists  */
++} quicktab;
++
++typedef struct {
+ 	char tag[3];
+ 	char title[30];
+ 	char artist[30];
+@@ -73,6 +78,7 @@
+ 	char *fullpath;
+ 	char *title;
+ 	char *artist;
++	char *album;
+ 	struct _flist *next;
+ 	struct _flist *prev;
+ } flist;
+@@ -108,7 +114,7 @@
+ 	char buf[BUFFER_SIZE+1];           /* The input line itself                */
+ } Input;
+ 
+-typedef struct _win {
++typedef struct _win { //FIXME: why there's a segfault when I add a pointer in the middle?
+ 	WINDOW *win;                       /* the actual ncurses window            */
+ 	PANEL *panel;                      /* the panel, duh                       */
+ 	int width;                         /* window/panel width                   */
+@@ -124,6 +130,7 @@
+ #define W_ACTIVE   0x01              /* is the window active?                */
+ #define W_LIST     0x02              /* is it a list, or just 'contents'     */
+ #define W_RDONLY   0x04              /* is it read-only, ie can we modify it */
++#define W_PLYLST   0x08              /* is it playlist or file chooser window?     */
+ 	union {
+ 		wlist *list;               /* if the window has contents, use this */
+ 		flist *play;               /* otherwise just this                  */
+@@ -134,11 +141,14 @@
+ 	const u_char *format;              /* format for the text in the window    */
+ 	struct _win *next;                 /* next window in the cycle             */
+ 	struct _win *prev;                 /* previous window in the cycle         */
++	char *suffix;
+ } Window;
+ 
+ typedef struct _config {
+ 	char mpgpath[256];
+ 	char dfl_plist[256];
++	char mpgfile[256];
++	char mpgfileformat[256];
+ 	u_int16_t c_flags;
+ #define C_PADVANCE 0x01
+ #define C_FADVANCE 0x02
+@@ -147,6 +157,7 @@
+ #define C_NUKE     0x10
+ 	int buffer;
+ 	int jump;
++	quicktab q;
+ } Config;
+ 
+ typedef struct {
+@@ -163,10 +174,20 @@
+ 	char **inputs;                  /* array of default values           */
+ 	int num_prompts;                /* total # of prompts/defaults       */
+ 	int (*finish) (char **, int);   /* function to parse the final input */
+-	
+-
++} Inputbox;
+ 
++typedef struct _ring { 
++	int nr;
++	wlist * list;
++	struct _ring * prev;
++	struct _ring * next;
++} ring;
+ 
+-} Inputbox;
++typedef struct {
++	int max;
++	int count;
++	ring * current;					// currently visible pls
++	ring * playing;					// currently playing pls (not necessary the same
++} pls;
+ 
+ #endif /* _struct_h */
+--- mms-0.89a.orig/files.c
++++ mms-0.89a/files.c
+@@ -5,13 +5,14 @@
+ #include "files.h"
+ #include "misc.h"
+ #include "info.h"
++#include "window.h"
+ #include "extern.h"
+ 
+ static int	sort_mp3(const void *, const void *);
+ static int	check_file(flist *);
+ 
+ flist *
+-read_mp3_list(wlist *list)
++read_mp3_list(wlist *list, char *suffix)
+ {
+ 	char *dir = NULL;
+ 	DIR *dptr = NULL;
+@@ -59,12 +60,19 @@
+ 			mp3list = ftmp;
+ 			length++;
+ 		} else if (S_ISREG(st.st_mode)) {
+-			if (strncasecmp(".mp3", strchr(dent->d_name, '\0')-4, 4))
++			if (strncasecmp(files->suffix, strchr(dent->d_name, '\0')-4, 4))
+ 				continue;
+ 			tmp = NULL;
+-			if (!(tmp = mp3_info(dent->d_name, tmp, st.st_size)))
+-				continue;
+-			ftmp = tmp;
++
++			if (!strcmp(files->suffix,".mp3"))
++			{
++				if (!(tmp = mp3_info(dent->d_name, tmp, st.st_size)))
++					continue;
++				ftmp = tmp;
++			}
++			else
++				ftmp = (flist *) calloc(1, sizeof(flist));
++
+ 			ftmp->filename = strdup(dent->d_name);
+ 
+ 			ftmp->path = strdup(dir);
+@@ -214,31 +222,61 @@
+ next_valid(Window *win, flist *file, int c)
+ {
+ 	flist *ftmp = file;
++	flist *next = NULL, *prev = NULL;
+ 	int fix_selected = 0;
++	
+ 	if (!file)
+ 		return file;
++	
++	next = file->next;
++	prev = file->prev;
++
+ 	if (file->flags & F_SELECTED)
+ 		fix_selected = 1;
+ 	switch (c) {
+ 		case KEY_HOME:
+ 		case KEY_DOWN:
+ 		case KEY_NPAGE:
+-			while (!check_file(file))
++			while (file && !check_file(file))
+ 				file = delete_file(win, file);
++
++			// if we deleted all below, and there was something above...
++			if (!(file) && (file=prev))
++				while (file && !check_file(file)) {
++					ftmp = file->prev;
++					delete_file(win, file);
++					file = ftmp;
++				}
++
+ 			break;
+ 		case KEY_END:
+ 		case KEY_UP:
+ 		case KEY_PPAGE:
+-			while (!check_file(file)) {
++			while (file && !check_file(file)) {
+ 				ftmp = file->prev;
+ 				delete_file(win, file);
+ 				file = ftmp;
+ 			}
++
++			// if we deleted all below, and there was something below...
++			if (!(file) && (file=next))
++				while (file && !check_file(file))
++					file = delete_file(win, file);
++
+ 			break;
+ 	}
+ 	if (fix_selected) {
+ 		win->contents.list->selected = file;
+ 		file->flags |= F_SELECTED;
+ 	}
++	
++	// if we deleted everything, let's do an update of screen here
++	// it's much easier this way...
++	if (!file) { 
++		update_info(files);
++		play->update(play);
++		doupdate();
++	};
++
+ 	return file;
+ }
+--- mms-0.89a.orig/tokens.c
++++ mms-0.89a/tokens.c
+@@ -8,7 +8,7 @@
+ parse_tokens(flist *file, char *line, int size, const char *fmt)
+ {
+ 	int len = 0;
+-	char *title, *artist, *genre;
++	char *title, *artist, *genre, *album;
+ 	
+ 	if (!fmt || !file)
+ 		return (const char *)line;
+@@ -23,6 +23,11 @@
+ 		artist = file->artist;
+ 	else
+ 		artist = "Unknown";
++
++	if (file->album)
++		album = file->album;
++	else
++		album = "Unknown Album";
+ 	
+ 	if (file->genre)
+ 		genre = file->genre;
+@@ -32,6 +37,15 @@
+ 	while (*fmt && (len < size)) {
+ 		if (*fmt == '%') {
+ 			switch(*++fmt) {
++				case 'c':   /* number of playlist in ring */
++					{
++						char namba[7];
++						sprintf (namba, "[%02d/%02d]", circular->current->nr, circular->count); 
++						strncat(line, namba, size-len);
++						len += strlen(namba);
++					}
++					break;
++					
+ 				case 't':   /* the song title */
+ 					strncat(line, title, size-len);
+ 					len += strlen(title);
+@@ -40,6 +54,10 @@
+ 					strncat(line, artist, size-len);
+ 					len += strlen(artist);
+ 					break;
++				case 'A':   /* the Album */
++					strncat(line, album, size-len);
++					len += strlen(album);
++					break;
+ 				case 'f':   /* filename */
+ 					strncat(line, file->filename, size-len);
+ 					len += strlen(file->filename);
+@@ -62,7 +80,7 @@
+ 					len += snprintf(line+len, size-len, "%ld", file->length);				
+ 					break;
+ 				case 'T':   /* time in format [%m:%s] */
+-					len += snprintf(line+len, size-len, "[%ld:%ld]", file->length / 60, file->length % 60);
++					len += snprintf(line+len, size-len, "[%02ld:%02ld]", file->length / 60, file->length % 60);
+ 					break;
+ 				case 'g':   /* genre */
+ 					strncat(line, genre, size-len);
+@@ -79,5 +97,12 @@
+ 			line[len++] = *fmt++;
+ 		}
+ 	}
++
++	// lets turn all '_' into ' ' in this string
++	
++	for (len=0; len<strlen(line); len++)
++		if (line[len]=='_')
++			line[len]=' ';
++	
+ 	return (const char *)line;
+ }
+--- mms-0.89a.orig/id3.c
++++ mms-0.89a/id3.c
+@@ -357,6 +357,9 @@
+ 	if (file->artist)
+ 		free(file->artist);
+ 	file->artist = strdup(new_tag.artist);
++	if (file->album)
++		free(file->album);
++	file->album = strdup(new_tag.album);
+ 	if (isdigit(*new_tag.genre))
+ 		file->genre = Genres[atoi(new_tag.genre)];
+ 	else
+--- mms-0.89a.orig/window.c
++++ mms-0.89a/window.c
+@@ -75,7 +75,9 @@
+ 		else
+ 			wlist->selected->colors = colors[SELECTED];
+ 		wlist->where = 1;
++
+ 		return window;
++		
+ 	} else if (c == KEY_END) {
+ 		wlist->selected->flags &= ~F_SELECTED;
+ 		if (wlist->selected->flags & F_PLAY)
+@@ -95,6 +97,7 @@
+ 			wlist->top = ftmp;
+ 		} else
+ 			wlist->top = wlist->head;
++		
+ 		return window;
+ 	}
+ 	ftmp = list = wlist->top;
+@@ -197,6 +200,7 @@
+ 	WINDOW *win = info->win;
+ 	int i = info->width;
+ 	flist *file = NULL;
++	flist *ftmp = NULL;
+ 
+ 	if (!window || !window->contents.list)
+ 		return 0;
+@@ -206,8 +210,11 @@
+ 	else
+ 		file = window->contents.play;
+ 
+-	clear_info();
++//	if (window == play)
++//		file = circular->playing->list->playing;
+ 
++	clear_info();
++	
+ 	if (file) {
+ 		my_mvwnprintw(win, 1, 12, colors[UNSELECTED], i-13, "%s", (file->flags & F_DIR) ? "(Directory)" : file->filename);
+ 		if (file->artist)
+@@ -221,7 +228,13 @@
+ 		 	my_mvwprintw(win, 4, 12, colors[UNSELECTED], "%-6s Genre: %-13s   Bitrate: %-3d", length, file->genre? : "Unknown", file->bitrate);
+ 		}
+ 	}
++
++	// ugly, I should do it some better way :> FIXME
++	ftmp = info->contents.play;
++	info->contents.play = file;
+ 	update_title(info);
++	info->contents.play = ftmp;
++	
+ 	update_panels();
+ 	return 1;
+ }
+@@ -258,7 +271,9 @@
+ 	PANEL *panel = window->panel;
+ 
+ 	int i, x, y;
+-	wborder(win, 'º', 'º', 'Í', 'Í', 'É', '»', 'È', '¼');
++//	wborder(win, 'º', 'º', 'Í', 'Í', 'É', '»', 'È', '¼');
++//	wborder(win, '|','|', 0, 0, '.', '.', '`', '\'');
++	wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
+ 	getmaxyx(win, y, x);
+ 	mvwchgat(win, 0, 0, x, A_ALTCHARSET | colors[ACTIVE], 0, NULL);
+ 	mvwchgat(win, y-1, 0, x, A_ALTCHARSET | colors[ACTIVE], 0, NULL);
+@@ -306,9 +321,21 @@
+ 	u_char title[BUFFER_SIZE+1], *p = NULL, horiz = ACS_HLINE;
+ 	u_int32_t color = colors[INACTIVE];
+ 	int i = 0, left, right, center, x = window->width-2;
++	int start = 1;
+ 
++	// x - available space
++	// i - length of string to display
++	// center - position of center
++	// left - count of chars from the left
++	// right - count of chars from the right
++	if (window == play)
++	{
++		start += 7;
++		x -= 7;
++	};
++	
+ 	if (window->flags & W_ACTIVE)
+-		horiz = 'Í', color = colors[ACTIVE];
++		horiz = ACS_HLINE, color = colors[ACTIVE];
+ 
+ 	memset(title, 0, sizeof(title));
+ 	p = parse_title(window, title, BUFFER_SIZE);
+@@ -329,11 +356,19 @@
+ 	left = x-i-right;
+ 
+ 	if (p && (i <= x)) {
+-		mvwhline(win, 0, 1, horiz | A_ALTCHARSET | color, left);
+-		my_mvwprintw(win, 0, 1+center, colors[TITLE], "[ %s ]", p);
+-		mvwhline(win, 0, 1+center+i, horiz | A_ALTCHARSET | color, right);
++		mvwhline(win, 0, start, horiz | A_ALTCHARSET | color, left);
++		my_mvwprintw(win, 0, start+center, colors[TITLE], "[ %s ]", p);
++		mvwhline(win, 0, start+center+i, horiz | A_ALTCHARSET | color, right);
++		
++		if (window == play)
++		{
++			// we have to put current pls on screen number anyway
++			char namba[7];
++			sprintf (namba, "[%02d/%02d]", circular->current->nr, circular->count);
++			my_mvwprintw(win, 0, 1, colors[TITLE], "%s", namba);
++		}
+ 		return 1;
+-	}
++	};
+ 	return 0;
+ }
+ 
+--- mms-0.89a.orig/TODO
++++ mms-0.89a/TODO
+@@ -0,0 +1,15 @@
++* correct info's title
++* modes for playlist - normal, looped, looped-one, random, random order
++* sorting of playlists
++* rewrite title format code
++* id3tag view (not edit)
++* file browser for loading/writting playlists (partialy done?)
++* interactive setup for quickfeatures
++* keybindings change
++* help screen
++* subplaylists - but are these really needed? (Stomil)
++* winplaylists drive: -> /dir mappings.
++* better active window display (how? Is there a way to get double border
++  from termcap/terminfo?)
++* decent VBR support - not only play, but display proper info too!
++  (I have no way to do it, anyone willing to do it?)
+--- mms-0.89a.orig/debian/README.Debian
++++ mms-0.89a/debian/README.Debian
+@@ -0,0 +1,15 @@
++mms for Debian
++----------------------
++
++Please check changelog.Debian, for changes. I tried to reflect changes I
++made in the manpage, but please check changelog for most decent info.
++
++If you'd like to help developing mms, look into TODO file, and then
++contact me. Most important thing now, are VBR files - they're not
++correctly displayed.
++
++Unfortunately, I wasn't able to get in touch with Author of mms. He
++probably changed his email address. If you know him, or you are him :) -
++please, contact me ASAP.
++
++ -- Jakub Turski <yacoob@chruptak.plukwa.net>, Tue, 24 Apr 2001 20:13:41 +0200
+--- mms-0.89a.orig/debian/mms.1
++++ mms-0.89a/debian/mms.1
+@@ -0,0 +1,161 @@
++.\"                                      Hey, EMACS: -*- nroff -*-
++.\" First parameter, NAME, should be all caps
++.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
++.\" other parameters are allowed: see man(7), man(1)
++.TH MMS 1 "2001-05-04 22:12:44"
++.\" Please adjust this date whenever revising the manpage.
++.\"
++.\" Some roff macros, for reference:
++.\" .nh        disable hyphenation
++.\" .hy        enable hyphenation
++.\" .ad l      left justify
++.\" .ad b      justify to both left and right margins
++.\" .nf        disable filling
++.\" .fi        enable filling
++.\" .br        insert line break
++.\" .sp <n>    insert n+1 empty lines
++.\" for manpage-specific macros, see man(7)
++.SH NAME
++mms \- A nice and quite powerful console mpg123 frontend
++.SH SYNOPSIS
++.B mms
++.SH DESCRIPTION
++This manual page documents briefly the
++.B mms
++and
++its use.
++This manual page was written for the Debian GNU/Linux distribution
++because the original program does not have a manual page.
++Unfortunately, it hasn't got any documentation in the GNU Info format. However, you can
++check /usr/share/doc/mms/* to get some info about it.
++.PP
++.\" TeX users may be more comfortable with the \fB<whatever>\fP and
++.\" \fI<whatever>\fP escape sequences to invode bold face and italics, 
++.\" respectively.
++\fImms\fP is a program that is a nice and friendly frontend to
++your mpg123 MP3 player. It tries to be simple but powerfull. Upon
++start, it presents user with several windows. There's a file/dir
++window, a mp3info window, playback info window, and playlist window.
++
++.SH FEATURES
++Well, it plays mp3 files. In addition to that, it is playlist aware -
++you can create, browse, edit, load and save your m3u playlists. There's
++more - you can have up to 30 playlists open at one time. Mms has capability
++to dump current mp3 info to file (tell you irc/mail/usenet friends what
++are you listening right now!). There can be up to 10 predefined quick
++directories and playlists. You can also edit ID3 tags with mms. It is
++also highly customizable, through mmsrc(5) file. Doesn't yet make fries
++(sorry, patch is on its way =D).
++
++.SH BASIC NAVIGATION
++.PD 0
++.TP
++TAB cycles between active windows. It also makes autocompletion in various fields (dirs/files in load/save playlist, genres in id3tag and so on).
++.TP
++ARROW KEYS are for basic navigation. pgup/pgdn, home/end also work.
++.TP
++Pressing 'q' will quit.
++
++.SH MOUSE SUPPORT
++There is also some mouse support, but it's Linux only:
++.IP *
++Left clicking on an mp3 in the files or playlist window will select it. If in the files window, left clicking again will add it to the playlist. If in the playlist window, left clicking again will play it.
++.IP *
++Left clicking the '<' and '>' arrows will move the selection bar up and down.
++.IP *
++Right clicking an mp3 in the playlist deletes it from the playlist.
++.IP *
++Left clicking above or below a scroll bar will scroll the list by one page. right clicking will go to the beginning or end of the list.
++.PP
++F1 or 'l' will allow you to load a playlist. It overwrites the current playlist.
++F2 will save the current playlist to a file.
++'`' will toggle between mp3/playlist browser. You can read a playlist in,
++by just pressing enter.
++
++.SH KEYS IN ALL WINDOWS
++.IP *
++\'f\' OR the right arrow key will advance one song
++.IP *
++\'b\' OR the left arrow key will go back one song
++.IP *
++\'s\' will stop the player
++.IP *
++\'p\' will pause the player
++.IP *
++\'+\' will jump forward (specified amount of frames)
++.IP *
++\'-\' will jump backward (specified amount of frames)
++.IP *
++\'{\' will create a new clear playlist
++.IP
++\'}\' will delete current playlist
++.IP *
++\'[\' will switch to the previous playlist (wraps around)
++.IP *
++\']\' will switch to the next playlist (wraps around)
++
++
++.SH KEYS IN FILES OR PLAYLIST WINDOW
++.IP *
++\'e\' will edit the ID3 tag of the selected mp3
++
++
++.SH KEYS IN FILES WINDOW
++.IP *
++Return is your friend. It adds files to the playlist and changes directories.
++.IP *
++\'r\' will rescan the current dir.
++.IP *
++\'a\' will add current dir and all its subdirectories to playlist.
++.IP *
++\'0\'..\'9\' will change to configured directory (quickdir feature in
++mmsrc(5) file)
++
++
++.SH KEYS IN INFO WINDOW
++.IP *
++\'r\' will randomize the playlist.
++
++.SH KEYS IN PLAYLIST WINDOW
++.IP *
++Press enter on a song to play that one. When it finishes, the player will advance to the next one until it comes to the end or encounters an error in one of the mp3s (or mpg123 dies :)
++.IP *
++DEL will remove a song from the playlist (unless it is playing!)
++.IP *
++\'r\' will randomize the playlist
++.IP *
++\'d\' will move currently selected song one position down
++.IP *
++\'u\' will move currently selected song one position up
++.IP *
++\'0\'..\'9\' will read in configured playlist file (quicklist feature in
++mmsrc(5) file)
++
++.SH KEYS IN EDIT ID3TAG WINDOW
++* In the ID3 edit window, up/down will move to the prev/next field. Input WILL BE TRUNCATED to the proper size immediately when you leave the field. No mouse support for anything in here...) Just press <cr> through all the fields and whammo, it will be saved.
++
++.SH ENVIRONMENT
++.PP
++.IP "MMSRC"
++Path to the configuration file
++
++.SH FILES
++.PP
++.IP "~/.mmsrc"
++Default (per user) configuration file. There's no systemwide one!
++
++.SH OPTIONS
++This programs takes no options.
++
++.SH BUGS
++If you core due to some lame bug, you may need to kill the mpg123
++child process. It goes berzerk if you orphan it.
++
++.SH SEE ALSO
++.BR mmsrc (5)
++.BR mpg123 (1),
++.BR mp3blaster (1).
++
++.SH AUTHOR
++This manual page was written by Jakub Turski <yacoob@chruptak.plukwa.net>,
++for the Debian GNU/Linux system (but may be used by others).
+--- mms-0.89a.orig/debian/changelog
++++ mms-0.89a/debian/changelog
+@@ -0,0 +1,94 @@
++mms (0.89a-5) unstable; urgency=low
++
++  * Changed default color scheme to less flashy one. It was the main
++    thing against, among new users :)
++  * Fixed %t in tokens list. Now, the seconds are zero padded.
++  * Now mms uses standard m3u playlist files format. It no longer saves
++    additional info in playlist. It requires additional 'stats' but, I
++    think it's worth it.
++  * Corrected jump technique - mms didn't use 'jump' value from config
++    file.
++  * Added quickdir feature - by pressing '0'..'9' key, you can now
++    change to previously defined dir. Sorry, no interactive setup :(
++  * Added quicklist feature - same as above, but for playlists.
++  * Applied irc-gotten (thx, Gimbgoth!) patch, which made mms NOT
++    segfault on VBR coded mp3s. However, it still wrong displays time...
++  * Added multiple playlists - you can have up to 30 playlists open at
++    one time, and switch between them with '[' and ']' keys.
++  * Added token %c which expands to number of current playlist in
++    format: '[xx/yy]'
++  * Added recursive dir read ('a' key).
++
++ -- Jakub Turski <yacoob@chruptak.plukwa.net>  Sun, 13 May 2001 21:04:04 +0200
++
++mms (0.89a-4) unstable; urgency=low
++
++  * Fourth Release (yuck, going fast, Third haven't even hit the Net)
++  * My eyes are somehow back to normal, so it's happy patching time...
++  * Corrected a bug, which caused file panel to lock itself up upon
++    chdiring to directory with no read access.
++  * added F3 - as playlist/mp3file toggle key. Now, you can view .mms
++    files too, and read them in, after pressing F2. NOTE: this is verrry
++    dirty patch. Don't be afraid if something explodes (or implodes).
++  * I'm feeling a little lost in this source. Will someone give me a
++    hand?
++  * Due to all these above... mms moved back to unstable. Sorry, no
++    banana :>
++
++ -- Jakub Turski <yacoob@chruptak.plukwa.net>  Sat,  5 May 2001 13:27:46 +0200
++
++mms (0.89a-3) stable; urgency=low
++
++  * Third Release (trumpets! fireworks! TBH, give me a cheer - I hurt my
++    eyes, and it is a great pain writting it ;( ) Hope you'll like it.
++  * I decided to move mms to stable. I think (hope?) it's quite stable
++    now, even after I fiddled^Wpatched it :>
++  * Added a token '%A' which expands to current mp3file's album name.
++    Can be used ie. in window's titles. Or see below.
++  * added an option called 'mpgfileformat' which controls _what_ is
++    written to mpgfile if set. Default is '%t (%a - %A)'.
++  * Tried to update some docs, still don't know if it quite obvious for
++    nonprogrammers... That is, I added comments to example config files,
++    as there is no other info file besides INSTRUCTIONS.
++  * Added examples of tweaking mutt & slrn to get mp3info in headers.
++    Slrn could be tweaked in two ways - either by external .sl file, or
++    by editor_command like mutt.
++  * Created two manpages, mms(1) and mmsrc(5). Comments please!
++
++ -- Jakub Turski <yacoob@chruptak.plukwa.net>  Sat,  5 May 2001 00:04:04 +0200
++
++mms (0.89a-2) unstable; urgency=low
++
++  * Second Release
++  * There's a little bigger chance, that your system will NOT go down
++    in a puff of smoke. Or, there is not...? *puf!* :>
++  * Did a bit of really _nasty_ hacking (lack of comments and tons of 
++    *ahem* strange design, author please!) and added an option - 
++    mpgfile. Now mms can create a infofile about mp3 he is playing right
++    now. You can then put it in your .muttrc/.slrnrc like I did :> The
++    file is created in your $HOME
++  * Had no time to update the docs. Sorry, no bonus. Proper info is
++    here, read it or die.
++
++ -- Jakub Turski <yacoob@chruptak.plukwa.net>  Fri, 27 Apr 2001 01:39:46 +0200
++
++mms (0.89a-1) unstable; urgency=low
++
++  * Initial Release.
++  * This is my first Debian Package. Your computer will self-destruct 
++    in 5 minutes. Thank you for your cooperation.
++  * Corrected wborder in window.c, in order to make it cleanier on 
++    xterms with non iso8859-1 font. Looks more dull, but the different 
++    color shows which window is active so I hope it's okay.
++  * Added 'moving in playlist' feature. Two functions in playlist.c + 
++    little modification of mms.c. Works for me, report any bugs to 
++    Author and me. Original source wasn't well documented :/ The keys
++    are 'd' and 'u' for respectivel 'down' and 'up'
++  * The Author doesn't seem to get his email. Another fine piece of 
++    software lost?
++
++ -- Jakub Turski <yacoob@chruptak.plukwa.net>  Tue, 24 Apr 2001 20:13:41 +0200
++
++Local variables:
++mode: debian-changelog
++End:
+--- mms-0.89a.orig/debian/copyright
++++ mms-0.89a/debian/copyright
+@@ -0,0 +1,16 @@
++This package was debianized by Jakub Turski <yacoob@chruptak.plukwa.net> on
++Tue, 24 Apr 2001 20:13:41 +0200.
++
++It was downloaded from http://www.bitchx.org/~bytor/mms.html
++
++Upstream Author(s): Wesley Morgan <morganw@engr.sc.edu>
++
++Copyright:
++
++This software is copyright (C) 1999 by Wesley Morgan.
++
++You are free to distribute this software under the terms of
++the GNU General Public License.
++On Debian systems, the complete text of the GNU General Public
++License can be found in /usr/share/common-licenses/GPL file.
++
+--- mms-0.89a.orig/debian/dirs
++++ mms-0.89a/debian/dirs
+@@ -0,0 +1,3 @@
++usr/bin
++usr/share/doc/mms
++usr/share/doc/mms/examples
+--- mms-0.89a.orig/debian/mms.examples
++++ mms-0.89a/debian/mms.examples
+@@ -0,0 +1,5 @@
++mmsrc.example
++muttrc.mms
++currentmusic
++currentmusic.sl
++slrnrc.mms
+--- mms-0.89a.orig/debian/control
++++ mms-0.89a/debian/control
+@@ -0,0 +1,19 @@
++Source: mms
++Section: sound
++Priority: optional
++Maintainer: Jakub Turski <yacoob@chruptak.plukwa.net>
++Standards-Version: 3.0.1
++
++Package: mms
++Architecture: any
++Depends: ${shlibs:Depends}, mpg123 (>= 0.59r)
++Suggests: gpm
++Description: A nice and quite powerful console mpg123 frontend
++ mms is (as author said it) the program from which xmms ripped off
++ his name :>
++ .
++ It's also a nice and very nifty (in maintainer's opinion) mpg123
++ frontend. Much better than others around. However, contact with author
++ has been lost, and there are no new versions. But it's still usable :>
++ It was slightly modified, so try it even if you've seen it and not
++ liked it!  
+--- mms-0.89a.orig/debian/mmsrc.5
++++ mms-0.89a/debian/mmsrc.5
+@@ -0,0 +1,219 @@
++.\"                                      Hey, EMACS: -*- nroff -*-
++.\" First parameter, NAME, should be all caps
++.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
++.\" other parameters are allowed: see man(7), man(1)
++.TH MMSRC 5 "2001-05-04 23:22:51"
++.\" Please adjust this date whenever revising the manpage.
++.\"
++.\" Some roff macros, for reference:
++.\" .nh        disable hyphenation
++.\" .hy        enable hyphenation
++.\" .ad l      left justify
++.\" .ad b      justify to both left and right margins
++.\" .nf        disable filling
++.\" .fi        enable filling
++.\" .br        insert line break
++.\" .sp <n>    insert n+1 empty lines
++.\" for manpage-specific macros, see man(7)
++.SH NAME
++mmsrc \- a config file for mms
++.SH DESCRIPTION
++This manual describes the syntax of
++.B mms
++config file, called
++.B .mmsrc
++.
++.PP
++Configuration file for Matt's MP3 Selector consists of many options.
++.SH GENERIC OPTIONS
++Generic options could be set with
++.B set
++keyword. The syntax is:
++.PP
++.I set option value
++.PP
++where \fIvalue\fP could be either a string (without parenthesis) or
++true/false option.
++.PP
++Here are those options.
++
++.IP \fImpgpath\fP
++Path to mpg123 binary;
++.IP \fIplaylist\fP
++Path to default playlist to load;
++.IP \fImpgfile\fP
++File in $HOME to output current mp3 info, off when empty or not set;
++.IP \fImpgfileformat\fP
++Pretty obvious, what to output to mpgfile, tokens as in	window titles.
++Defaults to "%t (%a - %A)"
++.IP \fIplaylist_advance\fP
++Advance the playlist selection after adding a file?
++.IP \fIfile_advance\fP
++Advance the file selection after selecting a file?
++.IP \fIskip_info_box\fP
++Skip the info box when tabbing through windows?
++
++.IP \fIbuffer\fP
++Size of the buffer mpg123 uses (integer, in kb).
++NOTE -- When using the buffer, mpg123 spawns a child process to buffer
++itself. It seems to have some difficulties cleaning up this child when we
++are trying to exit ourselves. Use at your own risk, and be sure to kill
++off any orphan mpg123's because they go berserk on your cpu.
++
++.IP \fIjump\fP
++How many frames to jump with +/-
++.IP \fIloop\fP
++Loop over the playlist when we get to the end?
++.IP \fInuke_spaces\fP
++Save id3 tags with space padding (false) or null padding (true).
++According to the 'id3' standard I have found they are SUPPOSED to be null!
++up yours, whatever pascal coders decided to space pad them!!!!!
++
++.IP \fBEXAMPLE\fP
++.nf
++set mpgpath             /usr/local/bin/mpg123
++set playlist            /home/yacoob/playlisty/bg.mms
++set mpgfile             .currentmp3
++set mpgfileformat       %t ( %a - %A )
++set buffer              0
++set jump                100
++set playlist_advance    false
++set file_advance        true
++set skip_info_box       true
++set loop                true
++set nuke_spaces         true
++.fi
++
++.SH QUICKDIRS
++You can define up to 10 quickdirs - directories that will be available
++upon touch of the proper key in files window. The syntax is:
++.PP
++.I quickdir number /path/
++.PP
++.IP \fBEXAMPLE\fP
++.nf
++quickdir 1  /cdrom
++quickdir 2  /home/yacoob
++quickdir 3  /mnt/mp3
++.fi
++
++.SH QUICKLISTS
++You can define up to 10 quicklists - playlists that will be available
++upon touch of the key, while in playlist window. The syntax is:
++.PP
++.I quicklist number /path/file
++.PP
++.IP \fBEXAMPLE\fP
++.nf
++quicklist 1  /cdrom/all.m3u
++quicklist 2  //home/yacoob/playlists/blind.guardian.m3u
++quicklist 3  /mnt/kult/best.of.m3u
++.fi
++
++
++.SH COLORS
++Next, you can set up colors of various elements of screen. Background colors can be: black, red, green, brown, blue, magenta, cyan, grey. Foreground colors can, in addition to above, be: b_black, b_red, b_green, yellow, b_blue, b_magenta, b_cyan, white
++
++.IP \fBEXAMPLE\fP
++.nf
++color active            white:black
++color inactive          yellow:black
++color selected          yellow:red
++color unselected        grey:black
++color title             green:black
++color scroll            yellow:black
++color scroll_bar        yellow:black
++color playing           b_cyan:black
++color sel_playing       b_cyan:red
++color file_back         black:black
++color info_back         black:black
++color play_back         black:black
++color menu_back         black:black
++color menu_text         b_red:black
++color arrows            yellow:black
++color edit_back         yellow:black
++color edit_active       white:blue
++color edit_inactive     grey:black
++# not used, yet
++color edit_prompt       white:black
++.fi
++
++.SH WINDOWS
++In here, you can set up windows' positions and sizes and their title's formats (formats are only used for 'list' type windows). Titles can contain tokens, which expands to proper info upon displaying.
++.PP
++Window format tokens:
++.nf 
++ %t - the song title
++ %a - the artist
++ %A - the Album
++ %f - filename
++ %F - complete filename, incl path
++ %p - the path
++ %m - how many minutes?
++ %s - "remainder" seconds (fraction of minutes)
++ %S - total length in seconds
++ %T - time in format [%m:%s]
++ %g - genre
++ %% - like with printf, insert a %
++.fi
++While calculating width & height, + - * / operators are ok. Use 'w' and 'h' to get screen width and height. A 0 for width/height will go from x/y to the max.
++.PP
++Be careful here. Don't put spaces in expressions. Borders will take up two spaces. If you screw up things can overlap and look ugly.
++.PP
++title.format  = format string for the title (optional)
++title.default = default title, if no formats apply (optional, has a default)
++
++.nf
++# file selection window
++files height    h-1
++files width     w/4
++files y         0
++files x         3*w/4
++files format    %f
++files title.default -= files =-
++
++# info window
++info height     6
++info width      3*w/4
++info y          h-10
++info x          0
++info title.default -= mp3 info =-
++
++# playlist window
++play height     h-10
++play width      3*w/4
++play y          0
++play x          0
++play format     %t   (%S sec)
++play title.default -= playlist =-
++play title.format -= playlist -  %p =-
++
++# the playback window
++playback height 3
++playback width  3*w/4
++playback y      h-4
++playback x      0
++playback title.default -= playthingy =-
++playback title.format -= %t =-
++
++# "menubar"
++menubar height  1
++menubar width   w
++menubar y       h-1
++menubar x       0
++
++# id3 edit box
++id3edit height  8
++id3edit width   50
++id3edit y       h-12
++id3edit x       w-50
++id3edit title.default -= tagedit =-
++id3edit title.format -= tagedit of %f =-
++.fi
++
++.SH SEE ALSO
++.BR mms (1).
++.BR /usr/share/doc/mms/examples/*
++.SH AUTHOR
++This manual page was written by Jakub Turski <yacoob@chruptak.plukwa.net>,
++for the Debian GNU/Linux system (but may be used by others).
+--- mms-0.89a.orig/debian/rules
++++ mms-0.89a/debian/rules
+@@ -0,0 +1,77 @@
++#!/usr/bin/make -f
++# Sample debian/rules that uses debhelper.
++# GNU copyright 1997 to 1999 by Joey Hess.
++
++# Uncomment this to turn on verbose mode.
++#export DH_VERBOSE=1
++
++# This is the debhelper compatability version to use.
++export DH_COMPAT=1
++
++build: build-stamp
++build-stamp:
++	dh_testdir
++
++	
++	# Add here commands to compile the package.
++	$(MAKE) all
++
++	touch build-stamp
++
++clean:
++	dh_testdir
++	dh_testroot
++	rm -f build-stamp
++
++	# Add here commands to clean up after the build process.
++	-$(MAKE) clean
++
++	dh_clean
++
++install: build
++	dh_testdir
++	dh_testroot
++	dh_clean -k
++	dh_installdirs
++
++	# Add here commands to install the package into debian/tmp.
++	$(MAKE) install DESTDIR=`pwd`/debian/tmp
++
++
++# Build architecture-independent files here.
++binary-indep: build install
++# We have nothing to do by default.
++
++# Build architecture-dependent files here.
++binary-arch: build install
++#	dh_testversion
++	dh_testdir
++	dh_testroot
++#	dh_installdebconf	
++	dh_installdocs
++	dh_installexamples
++	dh_installmenu
++#	dh_installemacsen
++#	dh_installpam
++#	dh_installinit
++#	dh_installcron
++	dh_installmanpages
++#	dh_installinfo
++#	dh_undocumented mms.1
++	dh_installchangelogs 
++	dh_link
++	dh_strip
++	dh_compress
++	dh_fixperms
++	# You may want to make some executables suid here.
++#	dh_suidregister
++#	dh_makeshlibs
++	dh_installdeb
++#	dh_perl
++	dh_shlibdeps
++	dh_gencontrol
++	dh_md5sums
++	dh_builddeb
++
++binary: binary-indep binary-arch
++.PHONY: build clean binary-indep binary-arch binary install
+--- mms-0.89a.orig/debian/docs
++++ mms-0.89a/debian/docs
+@@ -0,0 +1,6 @@
++INSTRUCTIONS
++BUGS
++TODO
++README
++README.remote
++README.tokens
+--- mms-0.89a.orig/currentmusic
++++ mms-0.89a/currentmusic
+@@ -0,0 +1,10 @@
++#!/bin/sh
++
++# this little one, outputs a proper header or nothing if mms 
++# isn't running, or otherwise mpgfile isn't present
++
++if [ -e ~/.currentmp3 ] 
++then
++  header=`cat ~/.currentmp3`
++  echo 'X-Music: '$header
++fi
+--- mms-0.89a.orig/BUGS
++++ mms-0.89a/BUGS
+@@ -0,0 +1,12 @@
++* when doing multi-playlist mode, it isn't deterministic which song will
++  be played next, if you have switched playlist after started playing...
++
++Also, please check out FIXMEs in sources, these are creepy workarounds 
++around various problems that arouse during tweaking. If you are smart 
++enough to tell me why is this happening, and have some time to explain 
++me these - please, mail me.
++
++TBH: I'm not quite sure if '`' bussines works as I planned... but
++unfortunately I had no time to double check it.
++
++Jakub Turski <yacoob@chruptak.plukwa.net>
+--- mms-0.89a.orig/currentmusic.sl
++++ mms-0.89a/currentmusic.sl
+@@ -0,0 +1,34 @@
++% -*- mode: slang; mode: fold; -*-
++%
++%{{{ INSERT THE OUTPUT OF AN EXTERNAL COMMAND INTO AN X-HEADER
++% the name says it all. Use fx. ddate, uptime or a similar thing with it.
++% Put the macro in /usr/share/macros/macros.sl
++% (or wherever you wish), and add the following to .slrnrc:
++%
++%   set macro_directory "/usr/share/macros"
++%   interpret "macros.sl"
++%
++% Remember to add the function to hooks if they already exist;
++% DO NOT redefine them.
++%
++% Tomasz 'tsca' Sienicki <tsca@cryogen.com>
++% <http://www.geocities.com/tsca.geo/tsca.slang>
++%
++% A bit modified by Jakub Turski <yacoob@chruptak.plukwa.net>
++%}}}
++
++define ext_header ()
++{ 
++   variable eh,fp;
++
++   system ("currentmusic > /tmp/tmp.slrn");
++   fp = fopen("/tmp/tmp.slrn", "r"); 
++   fgets (&eh,fp);
++   set_string_variable("custom_headers",sprintf ("%s",eh));
++   set_string_variable("followup_custom_headers",sprintf ("%s",eh));
++   fclose(fp);
++   system ("rm -f /tmp/tmp.slrn");
++}
++
++  define followup_hook (){ ext_header; }
++  define post_hook (){ ext_header; }
+--- mms-0.89a.orig/cosiek.mms
++++ mms-0.89a/cosiek.mms
+@@ -0,0 +1 @@
++/root/archiwum/debian/workplace/mms-0.89a/track_11.mp3
+--- mms-0.89a.orig/mmsrc.example
++++ mms-0.89a/mmsrc.example
+@@ -0,0 +1,151 @@
++# Configuration file for Matt's MP3 Selector
++
++#
++# mpgpath: path to mpg123
++# playlist: path to default playlist to load
++# playlist_advance: advance the playlist selection after adding a file?
++# file_advance: advance the file selection after selecting a file?
++# skip_info_box: skip the info box when tabbing through windows?
++
++# buffer: size of the buffer mpg123 uses (integer, in kb)
++# NOTE -- When using the buffer, mpg123 spawns a child process to buffer
++# itself. It seems to have some difficulties cleaning up this child when we
++# are trying to exit ourselves. Use at your own risk, and be sure to kill
++# off any orphan mpg123's because they go berserk on your cpu.
++
++# jump: how many frames to jump with +/-
++# loop: loop over the playlist when we get to the end?
++# nuke_spaces: save id3 tags with space padding (false) or null padding (true)
++# According to the 'id3' standard I have found they are SUPPOSED to be null!
++# up yours, whatever pascal coders decided to space pad them!!!!!
++
++set mpgpath		/usr/bin/mpg123
++set playlist		/home/yacoob/playlisty/bg.m3u
++set mpgfile		.currentmp3
++set mpgfileformat	%t - %a - %A
++set buffer		0
++set jump		20
++set playlist_advance	false
++set file_advance	true
++set skip_info_box	true
++set loop		false
++set nuke_spaces		true
++
++#
++# quickdirs - allow to quickly change directory in file browser, by just
++# pressing one of the '0'..'9' keys while in file window
++
++quickdir 1	/home/yacoob/playlisty
++quickdir 2	/mnt/mp3
++quickdir 3 	/cdrom
++
++#
++# quickplaylists - same as above, regarding playlists. Activated the
++# same way, in playlist window
++
++quicklist 1	/home/yacoob/playlisty/bg.m3u
++quicklist 2	/home/yacoob/playlisty/tata.m3u
++quicklist 3	/home/yacoob/playlisty/tata2.m3u
++quicklist 4	/home/yacoob/playlisty/carlorff.m3u
++quicklist 5	/home/yacoob/playlisty/jrock.m3u
++
++#
++#
++# Colors
++# 
++# Background colors can be:
++#     black, red, green, brown, blue, magenta, cyan, grey
++# Foreground colors can, in addition to above, be:
++#     b_black, b_red, b_green, yellow, b_blue, b_magenta, b_cyan, white
++#
++
++color active		yellow:black
++color inactive		brown:black
++color selected		yellow:red
++color unselected	grey:black
++color title		cyan:black
++color scroll		yellow:black
++color scroll_bar	yellow:black
++color playing		b_cyan:black
++color sel_playing	b_cyan:red
++color file_back		black:black
++color info_back		black:black
++color play_back		black:black
++color menu_back		black:black
++color menu_text		b_red:black
++color arrows		yellow:black
++color edit_back		yellow:black
++color edit_active	white:blue
++color edit_inactive	grey:black
++# not used, yet
++color edit_prompt	white:black
++
++#
++# Window positions and sizes and formats (only used for 'list' type windows)
++#
++# Window format tokens:
++# 
++# %t - the song title
++# %a - the artist
++# %f - filename
++# %F - complete filename, incl path
++# %p - the path
++# %m - how many minutes?
++# %s - "remainder" seconds (fraction of minutes)
++# %S - total length in seconds
++# %T - time in format [%m:%s]
++# %g - genre
++# %% - like with printf, insert a %
++#
++# + - * / operators are ok. Use 'w' and 'h' for screen width and height.
++# A 0 for width/height will go from x/y to the max.
++#
++# Be careful here. Don't put spaces in expressions. Borders will take up
++# two spaces. If you screw up things can overlap and look ugly.
++#
++# title.format  = format string for the title (optional)
++# title.default = default title, if no formats apply (optional, has a default)
++#
++
++# file selection window
++files height	h-1
++files width	w/4
++files y		0
++files x		3*w/4
++files format	%f
++files title.default -= pliki =-
++files title.format %p
++# info window
++info height	6
++info width	3*w/4
++info y		h-10
++info x		0
++info title.default -= mp3 info =-
++info title.format -= %F =-
++# playlist window
++play height	h-10
++play width	3*w/4
++play y		0
++play x		0
++play format	%T   %t 
++play title.default -= lista =-
++play title.format -= %p =-
++# the playback window
++playback height	3
++playback width	3*w/4
++playback y	h-4
++playback x	0
++playback title.default -= grajek =-
++playback title.format -= %t =-
++# "menubar"
++menubar height	1
++menubar width	w
++menubar y	h-1
++menubar x	0
++# id3 edit box
++id3edit height	8
++id3edit width	50
++id3edit y	h-12
++id3edit x	w-50
++id3edit title.default -= edycja taga =-
++id3edit title.format -= %f =-
+--- mms-0.89a.orig/muttrc.mms
++++ mms-0.89a/muttrc.mms
+@@ -0,0 +1,4 @@
++# this command makes mutt add output of currentmusic script into
++# new mail's header
++
++set editor="vim  '+/^$' -c ':-1r!currentmusic' -c '2/^$'"
+--- mms-0.89a.orig/slrnrc.mms
++++ mms-0.89a/slrnrc.mms
+@@ -0,0 +1,10 @@
++% set of sets :) to make slrn use mms' mpgfile info into headers.
++
++set editor_command "vim '%s' '+/^$' -c ':-1r!currentmusic' -c '2/^$'"
++
++set mail_editor_command "mutt -H '%s'"
++
++set post_editor_command "vim '%s' '+/^$' -c ':-1r!currentmusic' -c '2/^$'"
++
++set score_editor_command "vim '%s' +%d"
++
