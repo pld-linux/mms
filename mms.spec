@@ -5,12 +5,13 @@ Version:	0.89a
 Release:	1
 License:	GPL
 Group:		Applications/Sound
+Group(de):	Applikationen/Laut
 Group(pl):	Aplikacje/D¼wiêk
 Source0:	%{name}_%{version}.orig.tar.gz
 Patch0:		%{name}-DEBIAN.patch
 URL:		http://www.bitchx.org/~bytor/mms.html
 BuildRequires:	ncurses-devel
-BuildRequires:	gpm-devel
+BuildRequires:	gpm-devel >= 5.2
 Requires:	mpg123
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
@@ -33,11 +34,14 @@ je¿eli ju¿ go widzia³e¶ i nie polubi³e¶.
 %patch0 -p1 
 
 %build
-%{__make} CFLAGS="%{rpmcflags} -I%{_includedir}/ncurses -DVERSION=\\\"%{version}\\\" -DGPM_SUPPORT" LIBS="-lncurses -lpanel -lgpm" all
+%{__make} all \
+	CFLAGS="%{rpmcflags} -I%{_includedir}/ncurses -DVERSION=\\\"%{version}\\\" -DGPM_SUPPORT" \
+	LIBS="-lncurses -lpanel -lgpm"
 
 %install
 rm -rf $RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT{%{_bindir},%{_mandir}/man{1,5}}
+
 install mms $RPM_BUILD_ROOT%{_bindir}
 install debian/*.1 $RPM_BUILD_ROOT%{_mandir}/man1
 install debian/*.5 $RPM_BUILD_ROOT%{_mandir}/man5
