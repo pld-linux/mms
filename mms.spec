@@ -12,7 +12,7 @@ Patch0:		%{name}-DEBIAN.patch
 # dead
 #URL:		http://www.bitchx.org/bytor/mms.html
 BuildRequires:	gpm-devel
-BuildRequires:	ncurses-devel >= 5.2
+BuildRequires:	ncurses-ext-devel >= 5.2
 Requires:	mpg123
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
