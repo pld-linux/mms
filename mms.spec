@@ -8,8 +8,9 @@ Group:		Applications/Sound
 Group(de):	Applikationen/Laut
 Group(pl):	Aplikacje/D¼wiêk
 Source0:	%{name}_%{version}.orig.tar.gz
+#Source0:	http://www.bitchx.org/bytor/%{name}-%{version}.tgz
 Patch0:		%{name}-DEBIAN.patch
-URL:		http://www.bitchx.org/~bytor/mms.html
+URL:		http://www.bitchx.org/bytor/mms.html
 BuildRequires:	ncurses-devel >= 5.2
 BuildRequires:	gpm-devel
 Requires:	mpg123
