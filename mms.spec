@@ -27,7 +27,7 @@ slightly modified, so try it even if you've seen it and not liked it!
 %description -l pl
 Mi³a i porêczna nak³adka na mpg123. O wiele lepsza ni¿ wszystkie inne.
 Kontakt z autorem zosta³ utracony i nie program ma ju¿ nowych wersji.
-Ale ci±gle jest u¿yteczny. Zosta³ nieco zmienony wiêc spróbuj go nawet
+Ale ci±gle jest u¿yteczny. Zosta³ nieco zmieniony wiêc spróbuj go nawet
 je¿eli ju¿ go widzia³e¶ i nie polubi³e¶.
 
 %prep
