@@ -2,14 +2,15 @@ Summary:	Matt's MP3 Selector (mms)
 Summary(pl):	Textowy frontend na mpg123
 Name:		mms
 Version:	0.89a
-Release:	1
+Release:	2
 License:	GPL
 Group:		Applications/Sound
 Source0:	%{name}_%{version}.orig.tar.gz
 # Source0-md5:	13c15deb92437b1a8dc5126df3c55bcf
 #Source0:	http://www.bitchx.org/bytor/%{name}-%{version}.tgz
 Patch0:		%{name}-DEBIAN.patch
-URL:		http://www.bitchx.org/bytor/mms.html
+# dead
+#URL:		http://www.bitchx.org/bytor/mms.html
 BuildRequires:	gpm-devel
 BuildRequires:	ncurses-devel >= 5.2
 Requires:	mpg123
