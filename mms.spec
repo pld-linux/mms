@@ -5,8 +5,6 @@ Version:	0.89a
 Release:	1
 License:	GPL
 Group:		Applications/Sound
-Group(de):	Applikationen/Laut
-Group(pl):	Aplikacje/D¼wiêk
 Source0:	%{name}_%{version}.orig.tar.gz
 #Source0:	http://www.bitchx.org/bytor/%{name}-%{version}.tgz
 Patch0:		%{name}-DEBIAN.patch
