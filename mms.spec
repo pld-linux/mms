@@ -45,13 +45,11 @@ install mms $RPM_BUILD_ROOT%{_bindir}
 install debian/*.1 $RPM_BUILD_ROOT%{_mandir}/man1
 install debian/*.5 $RPM_BUILD_ROOT%{_mandir}/man5
 
-gzip -9nf README* BUGS TODO INSTRUCTIONS slrnrc.mms currentmusic.sl mmsrc.example muttrc.mms
-
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(644,root,root,755)
-%doc *.gz
+%doc README* BUGS TODO INSTRUCTIONS slrnrc.mms currentmusic.sl mmsrc.example muttrc.mms
 %attr(755,root,root) %{_bindir}/*
 %{_mandir}/man?/*
