@@ -1,5 +1,5 @@
 Summary:	Matt's MP3 Selector (mms)
-Summary(pl):	Textowy frontend na mpg123
+Summary(pl.UTF-8):   Textowy frontend na mpg123
 Name:		mms
 Version:	0.89a
 Release:	2
@@ -24,11 +24,11 @@ better than others around. However, contact with author has been lost,
 and there are no new versions. But it's still usable :> It was
 slightly modified, so try it even if you've seen it and not liked it!
 
-%description -l pl
-Mi≥a i porÍczna nak≥adka na mpg123. O wiele lepsza niø wszystkie inne.
-Kontakt z autorem zosta≥ utracony i nie program ma juø nowych wersji.
-Ale ci±gle jest uøyteczny. Zosta≥ nieco zmieniony wiÍc sprÛbuj go nawet
-jeøeli juø go widzia≥e∂ i nie polubi≥e∂.
+%description -l pl.UTF-8
+Mi≈Ça i porƒôczna nak≈Çadka na mpg123. O wiele lepsza ni≈º wszystkie inne.
+Kontakt z autorem zosta≈Ç utracony i nie program ma ju≈º nowych wersji.
+Ale ciƒÖgle jest u≈ºyteczny. Zosta≈Ç nieco zmieniony wiƒôc spr√≥buj go nawet
+je≈ºeli ju≈º go widzia≈Çe≈õ i nie polubi≈Çe≈õ.
 
 %prep
 %setup -q
