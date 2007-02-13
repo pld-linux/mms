@@ -1,5 +1,5 @@
 Summary:	Matt's MP3 Selector (mms)
-Summary(pl.UTF-8):   Textowy frontend na mpg123
+Summary(pl.UTF-8):	Textowy frontend na mpg123
 Name:		mms
 Version:	0.89a
 Release:	2
